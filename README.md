@@ -283,6 +283,27 @@ Batch scout multiple technologies for rapid portfolio analysis.
 
 ---
 
+## How It Compares to CB Insights
+
+| Aspect | Our MCP | CB Insights |
+|--------|---------|-------------|
+| Price | $2-$8 per report | $50k+/year (enterprise) |
+| Access method | MCP (AI-native) | Web dashboard |
+| Free tier | Yes - pay per call | No |
+| Real-time data | Yes - 8 live API sources | Dashboard (refresh cycles) |
+| Setup time | 5 minutes | Weeks (enterprise sales, onboarding) |
+
+**Why choose our MCP:**
+- MCP protocol is designed for AI agent integration - generate tech scouting reports as part of AI workflows
+- 8 live data sources (OpenAlex, Semantic Scholar, arXiv, USPTO, EPO, NIH, Grants.gov, ClinicalTrials.gov)
+- Composite scoring combines research momentum, patent landscape, funding validation, and TRL
+- Batch scouting for portfolio analysis at $8 per technology
+- No enterprise contract required - start using in minutes
+
+**CB Insights alternative:** https://www.cbinsights.com/
+
+---
+
 ## Pricing
 
 | Action | PPE Cost |
