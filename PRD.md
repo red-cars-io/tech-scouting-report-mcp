@@ -452,7 +452,7 @@ This actor implements Apify standby mode for efficient AI agent integration.
 
 **Requirements:**
 - `usesStandbyMode: true` in actor.json
-- `webServerMcpPath: "/mcp"` in actor.json
+- `webServerMCPPath: "/mcp"` in actor.json
 - HTTP server on `CONTAINER_PORT` (default 3000)
 - `handleRequest` export for direct invocation
 
