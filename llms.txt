@@ -1,0 +1,184 @@
+# Tech Scouting Report MCP - AI Agent Reference
+
+## Overview
+
+Tech Scouting Report MCP is a technology commercialization intelligence tool for AI agents. It scouts 8 data sources in parallel to evaluate research momentum, patent landscape, funding validation, and Technology Readiness Level (TRL).
+
+**Actor ID:** `tech-scouting-report-mcp`
+**Pricing:** Event-based (PPE)
+**API Keys:** Not required for most data sources (OpenAlex, USPTO, EPO, NIH, Grants.gov, ClinicalTrials.gov, arXiv); optional for Semantic Scholar
+
+---
+
+## Tool Definitions
+
+### tech_scout_report
+
+Comprehensive technology scouting report with scoring across research momentum, patent landscape, funding validation, and TRL assessment.
+
+**Input:** `{ technology: string, field?: string, region?: string }`
+**Output:** `{ compositeScore: number, verdict: string, researchMomentum: object, patentCommerc: object, fundingValidation: object, trlAssessment: object, allSignals: string[], recommendations: string[], metadata: object }`
+**PPE:** 8
+
+**Use when:** You need a complete investment assessment for a technology. Provides full scoring breakdown with composite score, verdict, and actionable recommendations.
+
+**Example:** `"Run a tech scouting report on mRNA therapeutics"`
+
+---
+
+### tech_scout_research_momentum
+
+Analyzes research momentum from OpenAlex (250M+ academic papers), Semantic Scholar (influential citations), and arXiv (preprints).
+
+**Input:** `{ technology: string, field?: string, region?: string }`
+**Output:** `{ technology: string, openAlexPapers: object[], semanticScholarPapers: object[], arxivPreprints: object[], citationVelocity: number, momentumScore: number }`
+**PPE:** 3
+
+**Use when:** You want to understand citation velocity, publication trends, and research activity without full report.
+
+---
+
+### tech_scout_patent_landscape
+
+Scouts USPTO and EPO patent databases for technology patents with grant status and patent score.
+
+**Input:** `{ technology: string, field?: string, region?: string }`
+**Output:** `{ technology: string, usptoPatents: object[], epoPatents: object[], authorInventorMatches: number, patentScore: number }`
+**PPE:** 2
+
+**Use when:** You need to understand the patent landscape, freedom to operate, or competitive IP position.
+
+---
+
+### tech_scout_funding_landscape
+
+Scouts NIH RePORTer, Grants.gov, and ClinicalTrials.gov for funding validation signals.
+
+**Input:** `{ technology: string, field?: string, region?: string }`
+**Output:** `{ technology: string, nihGrants: object[], govGrants: object[], clinicalTrials: object[], fundingScore: number }`
+**PPE:** 3
+
+**Use when:** You want to validate that funding supports technology development, or find investment opportunities backed by federal grants.
+
+---
+
+### tech_scout_trl_assessment
+
+Assesses Technology Readiness Level via keyword analysis, patent grant ratios, clinical trial phases, and SBIR/STTR activity.
+
+**Input:** `{ technology: string, field?: string, region?: string }`
+**Output:** `{ technology: string, estimatedTRL: number, trlLevel: string, highTrlKeywordsFound: number, medTrlKeywordsFound: number, patentGrantRatio: number, highestClinicalPhase: string, sbirPhase2Count: number, trlScore: number, signals: string[] }`
+**PPE:** 3
+
+**Use when:** You need to evaluate the maturity of a technology for commercialization. TRL scores range from 1 (basic research) to 9 (deployed product).
+
+---
+
+### tech_scout_batch
+
+Batch scout multiple technologies at once for rapid portfolio analysis.
+
+**Input:** `{ technologies: string[], field?: string, region?: string }`
+**Output:** `{ results: object[], rankedBy: string }`
+**PPE:** 8 per technology
+
+**Use when:** You need to compare multiple technologies simultaneously. Returns ranked results sorted by composite score.
+
+**Example:** `"Rank these 5 technologies by investment potential: mRNA vaccines, CRISPR, solid-state batteries, quantum computing, neural interfaces"`
+
+---
+
+## Scoring Model
+
+### Composite Score Calculation
+
+**Research Momentum (20% weight):**
+- Citation velocity: `(totalCitations / publicationCount) * 2`, cap 35pts
+- +10 if >50% publications from 2023+
+- Semantic Scholar influential citations: 2x weight, cap 25pts
+- arXiv preprints: 3pts each, cap 25pts
+- +15 amplifier if avg citations >10 AND preprints >3
+
+**Patent Commercialization (25% weight):**
+- USPTO: 4pts/granted, 2pts/application, +2pts if filed 2022+, cap 35pts
+- EPO: 4pts/granted (kind B/A), cap 25pts
+- Author-inventor cross-ref: 5pts/match, cap 25pts
+
+**Funding Validation (25% weight):**
+- NIH: 3pts/grant, +4pts for R01/R21/R35, +5pts for SBIR/STTR, cap 35pts
+- Grants.gov: 3pts each, +$1M bonus (10pts), cap 25pts
+- Clinical trials: 4pts each, +5pts Phase 2+ bonus, cap 25pts
+
+**TRL Assessment (30% weight):**
+- HIGH_TRL keywords: 4pts each, cap 30pts
+- MED_TRL keywords: 2pts each
+- LOW_TRL keywords: -1pt each
+- Patent grant ratio: up to 25pts
+- Phase 3 clinical: cap 25pts
+
+### Verdict Thresholds
+
+| Score | Condition | Verdict |
+|-------|-----------|---------|
+| 75+ | OR (TRL>=7 AND COMMERCIAL_READY) | INVEST_NOW |
+| 55-74 | - | STRONG_CANDIDATE |
+| 35-54 | - | MONITOR |
+| 15-34 | - | TOO_EARLY |
+| <15 | - | PASS |
+
+---
+
+## Data Sources
+
+| Source | Coverage | Auth Required |
+|--------|----------|---------------|
+| OpenAlex | 250M+ academic papers | No |
+| Semantic Scholar | Influential citations | Optional API key |
+| arXiv | Preprints | No |
+| USPTO Patents | US patents | No |
+| EPO Open Patent Services | EU patents | No |
+| NIH RePORTer | Federal grants | No |
+| Grants.gov | Federal opportunities | No |
+| ClinicalTrials.gov | Clinical trials | No |
+
+---
+
+## Cross-Sell Tools
+
+**academic-research-mcp** - Deep academic literature analysis with citation graphs and institutional networks
+**university-research-mcp** - University technology licensing and TTO contacts
+**patent-search-mcp** - Detailed patent search with claim parsing for FTO analysis
+
+---
+
+## Verdict Descriptions
+
+**INVEST_NOW:** Strong commercialization signal - prioritize licensing discussions and investor engagement. TRL >= 7 with commercial readiness confirmed.
+
+**STRONG_CANDIDATE:** Promising technology with validated funding and patent protection. Monitor for patent issuance and clinical trial results.
+
+**MONITOR:** Early stage technology with some signals present. Track publication velocity and set up alerts for new patents/funding.
+
+**TOO_EARLY:** Pre-commercial technology requiring additional development. Check back in 6-12 months for TRL advancement.
+
+**PASS:** Technology does not meet investment criteria at this time. Consider related applications or enabling technologies.
+
+---
+
+## AI Agent Usage Patterns
+
+**Investment Screening:**
+1. `tech_scout_batch` for top candidates
+2. Filter to STRONG_CANDIDATE or INVEST_NOW
+3. `tech_scout_report` for deep dive
+4. Cross-reference with patent-search-mcp for FTO
+
+**Competitive Intelligence:**
+1. `tech_scout_report` on competitor tech
+2. `tech_scout_patent_landscape` for IP mapping
+3. `tech_scout_funding_landscape` for R&D validation
+
+**Licensing Evaluation:**
+1. `tech_scout_trl_assessment` for maturity
+2. Identify NIH-funded research
+3. Cross-reference with university-research-mcp

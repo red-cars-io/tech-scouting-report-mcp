@@ -1,0 +1,27 @@
+{
+  "name": "tech-scouting-report-mcp",
+  "version": "1.0.0",
+  "description": "Technology commercialization intelligence MCP for AI agents. Scouting 8 data sources in parallel to score research momentum, patents, funding, and TRL level.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node src/main.js test"
+  },
+  "keywords": [
+    "apify",
+    "mcp",
+    "technology-scouting",
+    "patent-analysis",
+    "research-intelligence",
+    "funding",
+    "trl"
+  ],
+  "dependencies": {
+    "apify": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Apify",
+  "license": "MIT"
+}
