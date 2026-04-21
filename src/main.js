@@ -157,7 +157,11 @@ if (isStandby) {
                         const toolName = jsonBody.params?.name;
                         const toolArgs = jsonBody.params?.arguments || {};
                         if (!toolName) return replyError(-32602, 'Missing params.name');
-                        const toolResult = await handleToolCall(toolName, toolArgs);
+                        // Wrap tool execution in 90s timeout to prevent standby from hanging
+                        const toolResult = await Promise.race([
+                            handleToolCall(toolName, toolArgs),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('Tool execution timeout (90s)')), 90000))
+                        ]).catch(err => ({ error: err.message }));
                         return reply({
                             content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }]
                         });
@@ -167,7 +171,10 @@ if (isStandby) {
                     if (method && method.startsWith('tools/')) {
                         const toolName = method.slice(6);
                         const toolArgs = jsonBody.params || {};
-                        const toolResult = await handleToolCall(toolName, toolArgs);
+                        const toolResult = await Promise.race([
+                            handleToolCall(toolName, toolArgs),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('Tool execution timeout (90s)')), 90000))
+                        ]).catch(err => ({ error: err.message }));
                         return reply({
                             content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }]
                         });
@@ -175,7 +182,10 @@ if (isStandby) {
 
                     // Legacy direct: {tool: "...", params: {...}}
                     if (jsonBody.tool) {
-                        const toolResult = await handleToolCall(jsonBody.tool, jsonBody.params || {});
+                        const toolResult = await Promise.race([
+                            handleToolCall(jsonBody.tool, jsonBody.params || {}),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('Tool execution timeout (90s)')), 90000))
+                        ]).catch(err => ({ error: err.message }));
                         res.writeHead(200, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ status: 'success', result: toolResult }));
                         return;
