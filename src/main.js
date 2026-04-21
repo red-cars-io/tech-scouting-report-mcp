@@ -340,60 +340,109 @@ async function fetchArXiv(technology, field) {
 
 // USPTO Patents API
 async function fetchUSPTO(technology, field) {
+  const errors = [];
+  // Try primary USPTO IBD API endpoint
   try {
     const query = field ? `${technology} AND ${field}` : technology;
     const url = `https://developer.uspto.gov/ibd-api/v1/application/publications?searchText=${encodeURIComponent(query)}&rows=100`;
     const response = await fetchWithTimeout(url);
-    if (!response.ok) throw new Error(`USPTO API error: ${response.status}`);
-    const data = await response.json();
-    const patents = data.results || data;
-
-    return patents.map(p => ({
-      title: p.title || p.inventionTitle || 'Unknown',
-      patentNumber: p.patentNumber || p.applicationNumber || '',
-      filingDate: p.filingDate || p.publicationDate || '',
-      status: p.patentStatus || 'unknown',
-      inventorName: p.inventorName || p.inventors?.[0]?.inventorName || ''
-    }));
+    if (!response.ok) {
+      errors.push(`USPTO IBD API error: ${response.status}`);
+    } else {
+      const data = await response.json();
+      const patents = data.results || data;
+      if (patents.length > 0) {
+        return {
+          patents: patents.map(p => ({
+            title: p.title || p.inventionTitle || 'Unknown',
+            patentNumber: p.patentNumber || p.applicationNumber || '',
+            filingDate: p.filingDate || p.publicationDate || '',
+            status: p.patentStatus || 'unknown',
+            inventorName: p.inventorName || p.inventors?.[0]?.inventorName || ''
+          })),
+          error: null
+        };
+      }
+      errors.push('USPTO IBD API returned no results');
+    }
   } catch (error) {
-    console.error('USPTO fetch failed:', error.message);
-    return [];
+    errors.push(`USPTO IBD API fetch failed: ${error.message}`);
   }
+
+  // Fallback: Try USPTO Open Data Portal API
+  try {
+    const query = field ? `${technology} ${field}` : technology;
+    const url = `https://developer.uspto.gov/ibd-api/v1/application/publications?searchText=${encodeURIComponent(query)}&rows=50`;
+    const response = await fetchWithTimeout(url);
+    if (response.ok) {
+      const data = await response.json();
+      const patents = data.results || data;
+      if (patents.length > 0) {
+        return {
+          patents: patents.map(p => ({
+            title: p.title || p.inventionTitle || 'Unknown',
+            patentNumber: p.patentNumber || p.applicationNumber || '',
+            filingDate: p.filingDate || p.publicationDate || '',
+            status: p.patentStatus || 'unknown',
+            inventorName: p.inventorName || p.inventors?.[0]?.inventorName || ''
+          })),
+          error: null
+        };
+      }
+    }
+  } catch (error) {
+    errors.push(`USPTO fallback also failed: ${error.message}`);
+  }
+
+  console.error('USPTO fetch errors:', errors.join('; '));
+  return { patents: [], error: `USPTO APIs unavailable: ${errors.join('; ')}` };
 }
 
 // EPO Open Patent Services
 async function fetchEPO(technology, field) {
+  const errors = [];
+  // Try EPO OPS API endpoint
   try {
     const query = field ? `${technology} ${field}` : technology;
     const url = `https://ops.epo.org/rest-services/publication/search/epodoc?searchQuery=${encodeURIComponent(query)}&range=1-100`;
     const response = await fetchWithTimeout(url);
-    if (!response.ok) throw new Error(`EPO API error: ${response.status}`);
-    const text = await response.text();
+    if (!response.ok) {
+      errors.push(`EPO OPS API error: ${response.status}`);
+    } else {
+      const text = await response.text();
+      // Parse EPO XML response
+      const patents = [];
+      const bibRegex = /<bibliographic-data>[\s\S]*?<\/bibliographic-data>/gi;
 
-    // Parse EPO XML response
-    const patents = [];
-    const bibRegex = /<bibliographic-data>[\s\S]*?<\/bibliographic-data>/gi;
-    const titleRegex = /<divis>[\s\S]*?<text>([\s\S]*?)<\/text>/gi;
+      let match;
+      while ((match = bibRegex.exec(text)) !== null && patents.length < 100) {
+        const bib = match[0];
+        const titleMatch = bib.match(/<invention-title[^>]*>([\s\S]*?)<\/invention-title>/i);
+        const dateMatch = bib.match(/<date>(\d{4})/);
 
-    let match;
-    while ((match = bibRegex.exec(text)) !== null && patents.length < 100) {
-      const bib = match[0];
-      const titleMatch = bib.match(/<invention-title[^>]*>([\s\S]*?)<\/invention-title>/i);
-      const dateMatch = bib.match(/<date>(\d{4})/);
-
-      if (titleMatch) {
-        patents.push({
-          title: titleMatch[1].trim(),
-          date: dateMatch ? dateMatch[1] : 'Unknown',
-          office: 'EPO'
-        });
+        if (titleMatch) {
+          patents.push({
+            title: titleMatch[1].trim(),
+            date: dateMatch ? dateMatch[1] : 'Unknown',
+            office: 'EPO'
+          });
+        }
       }
+      if (patents.length > 0) {
+        return { patents, error: null };
+      }
+      errors.push('EPO OPS API returned no results');
     }
-    return patents;
   } catch (error) {
-    console.error('EPO fetch failed:', error.message);
-    return [];
+    errors.push(`EPO OPS fetch failed: ${error.message}`);
   }
+
+  // EPO requires authentication for its free tier (Fair Use policy)
+  // Return error indicating authentication is needed
+  errors.push('EPO OPS API requires authentication (Fair Use policy exceeded)');
+
+  console.error('EPO fetch errors:', errors.join('; '));
+  return { patents: [], error: `EPO API unavailable: ${errors.join('; ')}` };
 }
 
 // NIH RePORTer API
@@ -811,7 +860,7 @@ async function handleToolCall(tool, args) {
 
 async function generateFullReport(technology, field, region) {
   // Fetch all 8 data sources in parallel
-  const [openAlexPapers, semanticPapers, arxivPreprints, usptoPatents, epoPatents, nihGrants, govGrants, clinicalTrials] =
+  const [openAlexPapers, semanticPapers, arxivPreprints, usptoResult, epoResult, nihGrants, govGrants, clinicalTrials] =
     await Promise.all([
       fetchOpenAlex(technology, field),
       fetchSemanticScholar(technology, field),
@@ -822,6 +871,9 @@ async function generateFullReport(technology, field, region) {
       fetchGrantsGov(technology, field),
       fetchClinicalTrials(technology, field)
     ]);
+
+  const usptoPatents = usptoResult.patents;
+  const epoPatents = epoResult.patents;
 
   // Calculate scores
   const researchMomentum = calculateResearchMomentum(openAlexPapers, semanticPapers, arxivPreprints);
@@ -846,6 +898,11 @@ async function generateFullReport(technology, field, region) {
     ...trlAssessment.signals
   ];
 
+  // Collect API errors
+  const apiErrors = [];
+  if (usptoResult.error) apiErrors.push(usptoResult.error);
+  if (epoResult.error) apiErrors.push(epoResult.error);
+
   return {
     technology,
     compositeScore,
@@ -865,7 +922,8 @@ async function generateFullReport(technology, field, region) {
       nihGrants: nihGrants.length,
       govGrants: govGrants.length,
       clinicalTrials: clinicalTrials.length
-    }
+    },
+    apiErrors: apiErrors.length > 0 ? apiErrors : undefined
   };
 }
 
@@ -889,11 +947,13 @@ async function analyzeResearchMomentum(technology, field, region) {
 }
 
 async function analyzePatentLandscape(technology, field, region) {
-  const [usptoPatents, epoPatents] = await Promise.all([
+  const [usptoResult, epoResult] = await Promise.all([
     fetchUSPTO(technology, field),
     fetchEPO(technology, field)
   ]);
 
+  const usptoPatents = usptoResult.patents;
+  const epoPatents = epoResult.patents;
   const patentScore = calculatePatentCommerc(usptoPatents, epoPatents, 0);
 
   return {
@@ -901,7 +961,11 @@ async function analyzePatentLandscape(technology, field, region) {
     usptoPatents: usptoPatents.slice(0, 50),
     epoPatents: epoPatents.slice(0, 50),
     authorInventorMatches: 0,
-    patentScore: patentScore.score
+    patentScore: patentScore.score,
+    errors: {
+      uspto: usptoResult.error,
+      epo: epoResult.error
+    }
   };
 }
 
@@ -924,7 +988,7 @@ async function analyzeFundingLandscape(technology, field, region) {
 }
 
 async function assessTRL(technology, field, region) {
-  const [openAlexPapers, usptoPatents, epoPatents, clinicalTrials, nihGrants] = await Promise.all([
+  const [openAlexPapers, usptoResult, epoResult, clinicalTrials, nihGrants] = await Promise.all([
     fetchOpenAlex(technology, field),
     fetchUSPTO(technology, field),
     fetchEPO(technology, field),
@@ -932,6 +996,8 @@ async function assessTRL(technology, field, region) {
     fetchNIH(technology, field)
   ]);
 
+  const usptoPatents = usptoResult.patents;
+  const epoPatents = epoResult.patents;
   const trlAssessment = calculateTRLAssessment(openAlexPapers, usptoPatents, epoPatents, clinicalTrials, nihGrants);
 
   return {
@@ -944,7 +1010,11 @@ async function assessTRL(technology, field, region) {
     highestClinicalPhase: trlAssessment.highestClinicalPhase,
     sbirPhase2Count: trlAssessment.sbirPhase2Count,
     trlScore: trlAssessment.score,
-    signals: trlAssessment.signals
+    signals: trlAssessment.signals,
+    errors: {
+      uspto: usptoResult.error,
+      epo: epoResult.error
+    }
   };
 }
 
