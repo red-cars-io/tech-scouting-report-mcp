@@ -4,9 +4,13 @@
  * Scouting 8 data sources in parallel: OpenAlex, Semantic Scholar, arXiv, USPTO, EPO, NIH, Grants.gov, ClinicalTrials.gov
  */
 
-const { ApifyClient } = require('apify');
+import http from 'http';
+import Apify, { Actor } from 'apify';
 
-const CONTAINER_PORT = process.env.CONTAINER_PORT || 3000;
+await Actor.init();
+
+const isStandby = Actor.config.get('metaOrigin') === 'STANDBY';
+const PORT = Actor.config.get('containerPort') || process.env.ACTOR_WEB_SERVER_PORT || 3000;
 const MCP_PATH = '/mcp';
 
 // MCP Tool Manifest
@@ -97,49 +101,142 @@ const MCP_TOOLS = [
   }
 ];
 
-// HTTP Server for MCP Protocol
-function createHttpServer() {
-  const http = require('http');
-
-  const server = http.createServer((req, res) => {
-    // MCP manifest endpoint
-    if (req.method === 'GET' && req.url === '/mcp/manifest') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ tools: MCP_TOOLS }));
-      return;
-    }
-
-    // MCP tool call endpoint
-    if (req.method === 'POST' && req.url === '/mcp') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', async () => {
-        try {
-          const { tool, arguments: args } = JSON.parse(body);
-          const result = await handleToolCall(tool, args || {});
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, result }));
-        } catch (error) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: error.message }));
+// HTTP Server for MCP Protocol (used in standby mode)
+if (isStandby) {
+    const server = http.createServer(async (req, res) => {
+        // Handle readiness probe
+        if (req.headers['x-apify-container-server-readiness-probe']) {
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end('OK');
+            return;
         }
-      });
-      return;
+
+        // Handle MCP requests
+        if (req.method === 'POST' && req.url === '/mcp') {
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', async () => {
+                try {
+                    const jsonBody = JSON.parse(body);
+                    const id = jsonBody.id ?? null;
+
+                    const reply = (result) => {
+                        const resp = id !== null
+                            ? { jsonrpc: '2.0', id, result }
+                            : result;
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(resp));
+                    };
+
+                    const replyError = (code, message) => {
+                        const resp = id !== null
+                            ? { jsonrpc: '2.0', id, error: { code, message } }
+                            : { status: 'error', error: message };
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(resp));
+                    };
+
+                    const method = jsonBody.method;
+
+                    // Standard MCP: initialize
+                    if (method === 'initialize') {
+                        return reply({
+                            protocolVersion: '2024-11-05',
+                            capabilities: { tools: {} },
+                            serverInfo: { name: 'tech-scouting-report-mcp', version: '1.0.0' }
+                        });
+                    }
+
+                    // Standard MCP: tools/list
+                    if (method === 'tools/list' || (!method && jsonBody.tool === 'list')) {
+                        return reply({ tools: MCP_TOOLS });
+                    }
+
+                    // Standard MCP: tools/call
+                    if (method === 'tools/call') {
+                        const toolName = jsonBody.params?.name;
+                        const toolArgs = jsonBody.params?.arguments || {};
+                        if (!toolName) return replyError(-32602, 'Missing params.name');
+                        const toolResult = await handleToolCall(toolName, toolArgs);
+                        return reply({
+                            content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }]
+                        });
+                    }
+
+                    // Legacy: tools/{toolName} method format
+                    if (method && method.startsWith('tools/')) {
+                        const toolName = method.slice(6);
+                        const toolArgs = jsonBody.params || {};
+                        const toolResult = await handleToolCall(toolName, toolArgs);
+                        return reply({
+                            content: [{ type: 'text', text: JSON.stringify(toolResult, null, 2) }]
+                        });
+                    }
+
+                    // Legacy direct: {tool: "...", params: {...}}
+                    if (jsonBody.tool) {
+                        const toolResult = await handleToolCall(jsonBody.tool, jsonBody.params || {});
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ status: 'success', result: toolResult }));
+                        return;
+                    }
+
+                    replyError(-32601, `Method not found: ${method}`);
+                } catch (error) {
+                    console.error('MCP error:', error.message);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ status: 'error', error: error.message }));
+                }
+            });
+            return;
+        }
+
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
+    });
+
+    server.listen(PORT, () => {
+        console.log(`Tech Scouting MCP listening on port ${PORT}`);
+    });
+
+    process.on('SIGTERM', () => {
+        server.close(() => process.exit(0));
+    });
+} else {
+    // Batch mode: run tool and exit
+    const input = await Actor.getInput();
+    if (input) {
+        const { tool, params = {} } = input;
+        if (tool) {
+            console.log(`Running tool: ${tool}`);
+            const result = await handleToolCall(tool, params);
+            await Actor.setValue('OUTPUT', result);
+        }
     }
-
-    // Readiness probe
-    if (req.method === 'GET' && req.url === '/') {
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
-      res.end('OK');
-      return;
-    }
-
-    res.writeHead(404);
-    res.end('Not found');
-  });
-
-  return server;
+    await Actor.exit();
 }
+
+// Export handleRequest for MCP gateway compatibility
+export default {
+    handleRequest: async ({ request, response, log }) => {
+        log.info("Tech Scouting MCP received request");
+        try {
+            const { method, params, id } = request;
+            if (method === 'tools/list') {
+                return { tools: MCP_TOOLS };
+            }
+            if (method === 'tools/call') {
+                const { name, arguments: args } = params;
+                const result = await handleToolCall(name, args || {});
+                return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+            }
+            return { error: 'Unknown method' };
+        } catch (error) {
+            log.error(error.message);
+            return { error: error.message };
+        }
+    }
+};
 
 // Data Source Fetchers with 120s timeout
 const TIMEOUT = 120000;
@@ -864,34 +961,3 @@ async function batchScout(technologies, field, region) {
   };
 }
 
-// Standalone test function
-async function testScouting(technology) {
-  console.log(`Testing tech scouting for: ${technology}`);
-  const report = await generateFullReport(technology);
-  console.log(JSON.stringify(report, null, 2));
-  return report;
-}
-
-// Apify Standby Mode Handler
-async function handleRequest(request) {
-  const { tool, arguments: args } = request;
-  return await handleToolCall(tool, args);
-}
-
-// Export for Apify
-module.exports = { handleRequest };
-
-// Start HTTP server for MCP protocol when run directly
-if (require.main === module) {
-  const server = createHttpServer();
-  server.listen(CONTAINER_PORT, () => {
-    console.log(`tech-scouting-report-mcp listening on port ${CONTAINER_PORT}`);
-    console.log(`MCP endpoint: http://localhost:${CONTAINER_PORT}${MCP_PATH}`);
-    console.log(`Manifest: http://localhost:${CONTAINER_PORT}${MCP_PATH}/manifest`);
-  });
-}
-
-// Allow standalone testing
-if (process.argv[2] === 'test' && process.argv[3]) {
-  testScouting(process.argv[3]).then(() => process.exit(0));
-}
