@@ -13,13 +13,14 @@
     "BUSINESS_INTELLIGENCE",
     "DATA_ANALYTICS"
   ],
+  "isPublic": true,
   "pricing": {
-    "model": "EVENT"
+    "model": "PAY_PER_EVENT"
   },
   "defaultRunOptions": {
     "memoryMbytes": 512,
     "timeoutSecs": 120
   },
   "usesStandbyMode": true,
-  "webServerMCPPath": "/mcp"
+  "webServerMcpPath": "/mcp"
 }
