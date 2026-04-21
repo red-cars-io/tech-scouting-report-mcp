@@ -1,22 +1,26 @@
 {
-  "title": "tech_scout_report",
-  "description": "Comprehensive technology scouting report with scoring across research momentum, patent landscape, funding validation, and TRL assessment. Returns composite score, verdict, all signals, recommendations, and metadata.",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "technology": {
-        "type": "string",
-        "description": "Technology name to scout"
-      },
-      "field": {
-        "type": "string",
-        "description": "Optional research field to narrow scope"
-      },
-      "region": {
-        "type": "string",
-        "description": "Optional region filter (US, EU, Asia)"
-      }
+  "title": "Tech Scouting Report",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "technology": {
+      "title": "Technology",
+      "type": "string",
+      "description": "Technology name to scout",
+      "editor": "textfield"
     },
-    "required": ["technology"]
-  }
+    "field": {
+      "title": "Field",
+      "type": "string",
+      "description": "Optional research field to narrow scope",
+      "editor": "textfield"
+    },
+    "region": {
+      "title": "Region",
+      "type": "string",
+      "description": "Optional region filter (US, EU, Asia)",
+      "editor": "textfield"
+    }
+  },
+  "required": ["technology"]
 }

@@ -1,28 +1,25 @@
 {
-  "actorSpecification": "actor-managed-v1",
+  "actorSpecification": 1,
   "name": "tech-scouting-report-mcp",
-  "version": "1.0.0",
+  "title": "Tech Scouting Report MCP",
   "description": "Technology commercialization intelligence MCP for AI agents. Scouting 8 data sources in parallel to score research momentum, patents, funding, and TRL level.",
-  "usesStandbyMode": true,
-  "webServerMcpPath": "/mcp",
+  "version": "1.0",
+  "meta": {
+    "templateId": "standby-node"
+  },
+  "input": "../input_schema.json",
+  "readme": "../README.md",
+  "categories": [
+    "BUSINESS_INTELLIGENCE",
+    "DATA_ANALYTICS"
+  ],
   "pricing": {
-    "type": "eventBased"
+    "model": "EVENT"
   },
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "technology": {
-        "type": "string",
-        "description": "Technology name to scout"
-      },
-      "field": {
-        "type": "string"
-      },
-      "region": {
-        "type": "string"
-      }
-    },
-    "required": ["technology"]
+  "defaultRunOptions": {
+    "memoryMbytes": 512,
+    "timeoutSecs": 120
   },
-  "timeoutMs": 180000
+  "usesStandbyMode": true,
+  "webServerMcpPath": "/mcp"
 }
