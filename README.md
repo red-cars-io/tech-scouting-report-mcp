@@ -6,6 +6,14 @@ Scout 8 data sources in parallel to evaluate research momentum, patent landscape
 
 ---
 
+## Comparison
+
+See how we compare to traditional platforms:
+
+- [Comparison: vs PitchBook, Crunchbase](COMPARISON.md)
+
+---
+
 ## Hero
 
 ```ascii
@@ -314,6 +322,12 @@ Batch scout multiple technologies for rapid portfolio analysis.
 | tech_scout_funding_landscape | 3 |
 | tech_scout_trl_assessment | 3 |
 | tech_scout_batch | 8 per technology |
+
+---
+
+## SEO Keywords
+
+- [Comparison: vs PitchBook, Crunchbase](COMPARISON.md)
 
 ---
 
