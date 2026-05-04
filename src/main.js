@@ -228,10 +228,10 @@ if (isStandby) {
 
 // Export handleRequest for MCP gateway compatibility
 export default {
-    handleRequest: async ({ request, response, log }) => {
+    handleRequest: async ({ request, log }) => {
         log.info("Tech Scouting MCP received request");
         try {
-            const { method, params, id } = request;
+            const { method, params } = request;
             if (method === 'tools/list') {
                 return { tools: MCP_TOOLS };
             }
